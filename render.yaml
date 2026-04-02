@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nexus-venture-backend
+    env: python
+    region: ohio
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./nexus.db # Or your production Postgres URL
+      - key: GEMINI_API_KEY
+        sync: false # Set this in Render Dashboard Environment variables!
+      - key: SECRET_KEY
+        generateValue: true
