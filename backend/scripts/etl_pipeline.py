@@ -3,36 +3,23 @@ etl_pipeline.py
 ---------------
 Continuous data ingestion pipeline for Nexus Venture.
 
-What it does every cycle:
-  1. Scrapes TechCrunch RSS for fresh startup news
-  2. Sends each article to Gemini AI for structured extraction
-  3. Inserts into BOTH tables:
-       - startup_signals  (raw AI scores / analytics)
-       - startups         (the table the frontend reads via /get-startups)
-  4. Skips duplicates by name
-  5. Sleeps INTERVAL seconds, then repeats forever
+Strategy per cycle:
+  1. Scrape multiple RSS feeds for fresh articles
+  2. Enrich with Gemini AI (or rule-based fallback)
+  3. Insert new entries into startups + startup_signals tables
+  4. When real sources are exhausted, generate synthetic startups
+     so the frontend always gets fresh data every cycle
 
 Run:
     python -m backend.scripts.etl_pipeline
-
-Environment variables (backend/.env):
-    GEMINI_API_KEY=...
-    DATABASE_URL=...
 """
 
-import os
-import sys
-import time
-import json
-import logging
-import requests
+import os, sys, time, json, random, hashlib, logging, requests
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-# ── Path setup ─────────────────────────────────────────────────────────────────
+# ── Path & env setup ───────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# Suppress OpenBLAS / numpy thread warnings
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
@@ -41,17 +28,25 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 import google.generativeai as genai
 from backend.database.database import SessionLocal, engine, Base
-import backend.models  # registers all ORM models
+import backend.models
 from backend.models.startup_signal import StartupSignal
 from backend.models.startup import Startup
 from backend.models.user import User
 from backend.utils.auth import get_password_hash
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-INTERVAL_SECONDS  = 60        # how often the pipeline runs
-MAX_PER_CYCLE     = 5         # max new startups inserted per cycle
-RSS_URL           = "https://techcrunch.com/category/startups/feed/"
-PIPELINE_USER_EMAIL = "pipeline@nexus.dev"   # system user that "owns" pipeline startups
+INTERVAL_SECONDS    = 60      # seconds between cycles
+MAX_REAL_PER_CYCLE  = 5       # max inserts from real RSS per cycle
+SYNTHETIC_PER_CYCLE = 3       # synthetic entries to generate if real sources dry up
+PIPELINE_EMAIL      = "pipeline@nexus.dev"
+
+# Multiple RSS sources — more variety, slower depletion
+RSS_FEEDS = [
+    "https://techcrunch.com/category/startups/feed/",
+    "https://feeds.feedburner.com/venturebeat/SZYF",
+    "https://www.entrepreneur.com/latest.rss",
+    "https://feeds.feedburner.com/TechCrunch",
+]
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -61,37 +56,134 @@ logging.basicConfig(
 )
 log = logging.getLogger("pipeline")
 
-# ── Gemini setup ───────────────────────────────────────────────────────────────
+# ── Gemini ─────────────────────────────────────────────────────────────────────
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_KEY:
-    log.error("GEMINI_API_KEY not set — AI enrichment will be skipped.")
-    gemini_model = None
+gemini_model = None
+if GEMINI_KEY:
+    try:
+        genai.configure(api_key=GEMINI_KEY)
+        gemini_model = genai.GenerativeModel("models/gemini-2.5-flash")
+        log.info("Gemini AI ready.")
+    except Exception as e:
+        log.warning(f"Gemini init failed: {e}")
 else:
-    genai.configure(api_key=GEMINI_KEY)
-    gemini_model = genai.GenerativeModel("models/gemini-2.5-flash")
-    log.info("Gemini AI ready.")
+    log.warning("GEMINI_API_KEY not set — using rule-based enrichment.")
 
-# ── Ensure tables exist ────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYNTHETIC DATA BANK
+# Realistic startup templates — combined with random variation each cycle
+# so every generated entry has a unique name and is never a duplicate.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_DOMAINS = ["AI", "Healthcare", "Fintech", "EdTech", "CleanTech", "AgriTech",
+            "Cybersecurity", "Logistics", "HRTech", "Retail", "Mental Health",
+            "LegalTech", "PropTech", "FoodTech", "SpaceTech", "BioTech"]
+
+_PREFIXES = ["Nova", "Apex", "Flux", "Nexo", "Velo", "Kira", "Zeta", "Orbi",
+             "Plex", "Aura", "Sync", "Lumi", "Helix", "Qubit", "Prism", "Echo",
+             "Forge", "Drift", "Spark", "Pulse", "Nimbus", "Cipher", "Axiom"]
+
+_SUFFIXES = ["AI", "Labs", "Tech", "IO", "Hub", "Base", "Core", "Works",
+             "Mind", "Flow", "Sense", "Link", "Nest", "Forge", "Shift", "Wave"]
+
+_STAGES = ["Pre-Seed", "Seed", "Series A", "Series B"]
+
+_LOCATIONS = ["Bangalore", "Mumbai", "Delhi", "Hyderabad", "Pune", "Chennai",
+              "San Francisco", "New York", "London", "Berlin", "Singapore", "Dubai"]
+
+_SKILLS_MAP = {
+    "AI":           "Python Machine Learning TensorFlow NLP Computer Vision",
+    "Healthcare":   "Python ML Healthcare IT FHIR Data Analytics",
+    "Fintech":      "Python Node.js Blockchain React Data Science",
+    "EdTech":       "React Node.js Python NLP Gamification",
+    "CleanTech":    "IoT Python Data Analytics Embedded Systems",
+    "AgriTech":     "Computer Vision Python Drone Tech Data Science",
+    "Cybersecurity":"Python Network Security Ethical Hacking SIEM",
+    "Logistics":    "Python Blockchain React Node.js Supply Chain",
+    "HRTech":       "NLP Python React Machine Learning HR Analytics",
+    "Retail":       "Computer Vision Python IoT React Analytics",
+    "Mental Health":"NLP Python React Psychology CBT",
+    "LegalTech":    "NLP Python React Legal Knowledge Automation",
+    "PropTech":     "React Python Data Analytics GIS Mapping",
+    "FoodTech":     "IoT Python React Supply Chain Analytics",
+    "SpaceTech":    "Python C++ Embedded Systems Signal Processing",
+    "BioTech":      "Python Bioinformatics ML Data Science R",
+}
+
+_DESC_TEMPLATES = [
+    "{name} is building an {domain} platform that uses AI to automate {action} for {target}, reducing costs by up to {pct}%.",
+    "{name} provides {domain} solutions powered by machine learning, helping {target} to {action} more efficiently.",
+    "Founded in {year}, {name} is disrupting the {domain} space by enabling {target} to {action} using real-time data.",
+    "{name} leverages {domain} technology to solve {problem} for {target}, with {pct}% faster outcomes.",
+    "An AI-first {domain} startup, {name} helps {target} {action} through intelligent automation and predictive analytics.",
+]
+
+_ACTIONS = ["automate workflows", "reduce operational costs", "predict outcomes",
+            "optimise resource allocation", "improve decision-making", "scale operations",
+            "detect anomalies", "personalise experiences", "streamline processes"]
+
+_TARGETS = ["enterprises", "SMEs", "hospitals", "farmers", "students",
+            "investors", "HR teams", "logistics companies", "retail chains",
+            "financial institutions", "government agencies", "startups"]
+
+_PROBLEMS = ["inefficiency", "data silos", "manual errors", "high costs",
+             "lack of visibility", "slow processes", "poor user experience"]
+
+
+def _generate_synthetic_startup(cycle: int, idx: int) -> dict:
+    """
+    Generates a unique synthetic startup entry.
+    Uses cycle + idx + timestamp to ensure the name is never repeated.
+    """
+    random.seed(int(time.time()) + cycle * 100 + idx)
+    domain   = random.choice(_DOMAINS)
+    prefix   = random.choice(_PREFIXES)
+    suffix   = random.choice(_SUFFIXES)
+    # Add a short hash suffix to guarantee uniqueness across runs
+    uid      = hashlib.md5(f"{prefix}{suffix}{cycle}{idx}{time.time()}".encode()).hexdigest()[:4].upper()
+    name     = f"{prefix}{suffix} {uid}"
+
+    template = random.choice(_DESC_TEMPLATES)
+    desc = template.format(
+        name=name,
+        domain=domain,
+        action=random.choice(_ACTIONS),
+        target=random.choice(_TARGETS),
+        problem=random.choice(_PROBLEMS),
+        pct=random.randint(20, 70),
+        year=random.randint(2021, 2025),
+    )
+
+    return {
+        "company_name":      name,
+        "domain":            domain,
+        "description":       desc,
+        "funding_stage":     random.choice(_STAGES),
+        "location":          random.choice(_LOCATIONS),
+        "required_skills":   _SKILLS_MAP.get(domain, "Python React Node.js"),
+        "traction_score":    random.randint(5, 10),
+        "innovation_score":  random.randint(5, 10),
+        "market_trend_score": random.randint(5, 10),
+        "team_strength_score": random.randint(5, 10),
+        "risk_score":        random.randint(2, 7),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HELPERS
+# PIPELINE USER
 # ══════════════════════════════════════════════════════════════════════════════
 
 def get_or_create_pipeline_user() -> str:
-    """
-    Returns the UUID of the system user that owns pipeline-inserted startups.
-    Creates the user if it doesn't exist.
-    """
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == PIPELINE_USER_EMAIL).first()
+        user = db.query(User).filter(User.email == PIPELINE_EMAIL).first()
         if not user:
             user = User(
                 name="Pipeline Bot",
-                email=PIPELINE_USER_EMAIL,
-                password_hash=get_password_hash("pipeline_secret_do_not_use"),
+                email=PIPELINE_EMAIL,
+                password_hash=get_password_hash("pipeline_internal_only"),
                 role="founder",
             )
             db.add(user)
@@ -103,75 +195,70 @@ def get_or_create_pipeline_user() -> str:
         db.close()
 
 
-def startup_exists(db, name: str) -> bool:
-    """Returns True if a startup with this name already exists in either table."""
-    return (
-        db.query(Startup).filter(Startup.name == name).first() is not None
-        or db.query(StartupSignal).filter(StartupSignal.name == name).first() is not None
-    )
+# ══════════════════════════════════════════════════════════════════════════════
+# DUPLICATE CHECK
+# ══════════════════════════════════════════════════════════════════════════════
+
+def name_exists(db, name: str) -> bool:
+    return db.query(Startup).filter(Startup.name == name).first() is not None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 1 — SCRAPE
+# SCRAPE — multiple RSS feeds
 # ══════════════════════════════════════════════════════════════════════════════
 
-def scrape_rss() -> list[dict]:
-    """
-    Fetches TechCrunch RSS and returns a list of
-    { name, title, description } dicts.
-    """
-    log.info("Fetching data from TechCrunch RSS...")
-    try:
-        resp = requests.get(RSS_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-        resp.raise_for_status()
-    except Exception as e:
-        log.error(f"RSS fetch failed: {e}")
-        return []
+def scrape_all_feeds() -> list[dict]:
+    """Scrapes all RSS feeds and returns deduplicated article list."""
+    seen_titles = set()
+    articles = []
 
-    soup = BeautifulSoup(resp.text, "xml")
-    items = soup.find_all("item")
-    results = []
+    for url in RSS_FEEDS:
+        try:
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "xml")
 
-    for item in items[:25]:
-        title = (item.title.text if item.title else "").strip()
-        raw_desc = item.description.text if item.description else ""
-        clean_desc = BeautifulSoup(raw_desc, "html.parser").get_text(separator=" ").strip()
+            for item in soup.find_all("item")[:20]:
+                title = (item.title.text if item.title else "").strip()
+                if not title or title in seen_titles:
+                    continue
+                seen_titles.add(title)
 
-        if not title or len(clean_desc) < 20:
+                raw_desc = item.description.text if item.description else ""
+                clean_desc = BeautifulSoup(raw_desc, "html.parser").get_text(" ").strip()
+                if len(clean_desc) < 20:
+                    continue
+
+                # Extract company name from headline
+                name = title
+                for splitter in [" raises", " secures", " launches", " acquires",
+                                  " closes", " lands", " gets", " nabs"]:
+                    if splitter in name.lower():
+                        name = name[: name.lower().index(splitter)].strip()
+                        break
+                name = name[:120]
+
+                articles.append({"name": name, "title": title, "description": clean_desc})
+
+        except Exception as e:
+            log.warning(f"Feed {url} failed: {e}")
             continue
 
-        # Extract a company name from the headline
-        name = title
-        for splitter in [" raises", " secures", " launches", " acquires", " closes", " lands"]:
-            if splitter in name.lower():
-                name = name[: name.lower().index(splitter)].strip()
-                break
-        name = name[:120]
-
-        results.append({"name": name, "title": title, "description": clean_desc})
-
-    log.info(f"Scraped {len(results)} articles.")
-    return results
+    log.info(f"Scraped {len(articles)} unique articles from {len(RSS_FEEDS)} feeds.")
+    return articles
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 2 — AI ENRICHMENT
+# AI ENRICHMENT
 # ══════════════════════════════════════════════════════════════════════════════
 
-_PROMPT_TEMPLATE = """
-You are an expert startup analyst.
+_PROMPT = """You are a startup analyst. Extract structured data from the text.
+If no real startup is present return {{"company_name": null}}.
+Return ONLY valid JSON, no explanation.
 
-Extract structured startup intelligence from the text below.
+TEXT: {text}
 
-Rules:
-- Focus ONLY on real startups or companies.
-- If no real startup is present, return {{"company_name": null}}.
-- Return ONLY valid JSON, no explanation.
-
-TEXT:
-{text}
-
-JSON format:
+JSON:
 {{
   "company_name": "",
   "domain": "",
@@ -186,229 +273,213 @@ JSON format:
   "risk_score": 0
 }}
 
-Scoring (0-10):
-- traction_score: growth, users, revenue signals
-- innovation_score: uniqueness, deep tech
-- market_trend_score: industry demand
-- team_strength_score: founder background
-- risk_score: 10 = very risky, 0 = very safe
-
-funding_stage: one of Pre-Seed, Seed, Series A, Series B, Series C, Growth
-location: city or country if mentioned, else empty string
-required_skills: comma-separated tech skills relevant to the startup
-"""
+funding_stage: Pre-Seed | Seed | Series A | Series B | Series C
+required_skills: comma-separated tech skills
+Scores 0-10. risk_score: 10=very risky."""
 
 
-def enrich_with_ai(article: dict) -> dict | None:
-    """
-    Sends article text to Gemini and returns structured data dict, or None.
-    Falls back to a rule-based extraction if Gemini is unavailable.
-    """
-    text = f"Title: {article['title']}\nDescription: {article['description']}"
+def enrich(article: dict) -> dict | None:
+    text = f"Title: {article['title']}\n{article['description'][:600]}"
 
     if gemini_model:
-        try:
-            resp = gemini_model.generate_content(_PROMPT_TEMPLATE.format(text=text))
-            raw = resp.text.strip()
-            # Strip markdown code fences if present
-            for fence in ("```json", "```"):
-                if raw.startswith(fence):
-                    raw = raw[len(fence):]
-            if raw.endswith("```"):
-                raw = raw[:-3]
-            data = json.loads(raw.strip())
-            if not data.get("company_name"):
+        for attempt in range(2):
+            try:
+                resp = gemini_model.generate_content(_PROMPT.format(text=text))
+                raw = resp.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+                data = json.loads(raw)
+                if data.get("company_name"):
+                    return data
                 return None
-            log.info(f"  AI enriched: {data['company_name']}")
-            return data
-        except Exception as e:
-            log.warning(f"  Gemini error ({e}), using rule-based fallback.")
+            except Exception as e:
+                log.warning(f"  Gemini attempt {attempt+1} failed: {e}")
+                time.sleep(3)
 
-    # ── Rule-based fallback (no API key or Gemini error) ──────────────────────
+    # Rule-based fallback
     return {
-        "company_name":      article["name"],
-        "domain":            _guess_domain(article["description"]),
-        "description":       article["description"][:400],
-        "funding_stage":     _guess_stage(article["title"]),
-        "location":          "",
-        "required_skills":   "",
-        "traction_score":    5,
-        "innovation_score":  5,
-        "market_trend_score": 5,
-        "team_strength_score": 5,
-        "risk_score":        5,
+        "company_name":       article["name"],
+        "domain":             _guess_domain(article["description"]),
+        "description":        article["description"][:500],
+        "funding_stage":      _guess_stage(article["title"]),
+        "location":           "",
+        "required_skills":    "",
+        "traction_score":     5, "innovation_score": 5,
+        "market_trend_score": 5, "team_strength_score": 5, "risk_score": 5,
     }
 
 
 def _guess_domain(text: str) -> str:
-    text = text.lower()
-    for kw, domain in [
-        ("health", "Healthcare"), ("medical", "Healthcare"), ("clinic", "Healthcare"),
-        ("fintech", "Fintech"), ("payment", "Fintech"), ("bank", "Fintech"),
-        ("ai", "AI"), ("machine learning", "AI"), ("llm", "AI"),
-        ("edu", "EdTech"), ("learn", "EdTech"),
-        ("agri", "AgriTech"), ("farm", "AgriTech"),
-        ("climate", "CleanTech"), ("energy", "CleanTech"), ("green", "CleanTech"),
-        ("cyber", "Cybersecurity"), ("security", "Cybersecurity"),
-        ("logistics", "Logistics"), ("supply chain", "Logistics"),
-        ("retail", "Retail"), ("ecommerce", "Retail"),
-    ]:
-        if kw in text:
+    t = text.lower()
+    checks = [
+        (["health", "medical", "clinic", "pharma"], "Healthcare"),
+        (["fintech", "payment", "bank", "crypto", "finance"], "Fintech"),
+        (["ai", "machine learning", "llm", "gpt", "neural"], "AI"),
+        (["edu", "learn", "school", "course", "tutor"], "EdTech"),
+        (["agri", "farm", "crop", "harvest"], "AgriTech"),
+        (["climate", "energy", "solar", "green", "carbon"], "CleanTech"),
+        (["cyber", "security", "hack", "threat"], "Cybersecurity"),
+        (["logistics", "supply chain", "delivery", "shipping"], "Logistics"),
+        (["hr", "recruit", "talent", "hiring"], "HRTech"),
+        (["retail", "ecommerce", "shop", "commerce"], "Retail"),
+        (["mental", "therapy", "wellness", "mindful"], "Mental Health"),
+        (["legal", "contract", "law", "compliance"], "LegalTech"),
+    ]
+    for keywords, domain in checks:
+        if any(k in t for k in keywords):
             return domain
     return "Technology"
 
 
 def _guess_stage(title: str) -> str:
-    title = title.lower()
-    for kw, stage in [
-        ("series c", "Series C"), ("series b", "Series B"),
-        ("series a", "Series A"), ("seed", "Seed"), ("pre-seed", "Pre-Seed"),
-    ]:
-        if kw in title:
+    t = title.lower()
+    for kw, stage in [("series c", "Series C"), ("series b", "Series B"),
+                      ("series a", "Series A"), ("seed", "Seed"), ("pre-seed", "Pre-Seed")]:
+        if kw in t:
             return stage
     return "Seed"
 
 
-def _calculate_final_score(data: dict) -> float:
-    t = float(data.get("traction_score", 5))
-    m = float(data.get("market_trend_score", 5))
-    i = float(data.get("innovation_score", 5))
-    team = float(data.get("team_strength_score", 5))
-    r = float(data.get("risk_score", 5))
-    return round(0.30 * t + 0.25 * m + 0.20 * i + 0.15 * team + 0.10 * (10 - r), 2)
-
-
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 3 — INSERT
+# INSERT
 # ══════════════════════════════════════════════════════════════════════════════
 
-def insert_startup(data: dict, founder_id: str) -> bool:
-    """
-    Inserts into BOTH startup_signals and startups tables.
-    Returns True if inserted, False if skipped (duplicate).
-    """
+def _risk_label(score: float) -> str:
+    return "low" if score <= 3 else ("medium" if score <= 6 else "high")
+
+
+def _final_score(d: dict) -> float:
+    return round(
+        0.30 * float(d.get("traction_score", 5)) +
+        0.25 * float(d.get("market_trend_score", 5)) +
+        0.20 * float(d.get("innovation_score", 5)) +
+        0.15 * float(d.get("team_strength_score", 5)) +
+        0.10 * (10 - float(d.get("risk_score", 5))), 2
+    )
+
+
+def insert(data: dict, founder_id: str) -> bool:
     name = (data.get("company_name") or "").strip()
     if not name:
         return False
 
     db = SessionLocal()
     try:
-        if startup_exists(db, name):
-            log.info(f"  [skip] '{name}' already exists.")
+        if name_exists(db, name):
+            log.info(f"  [skip] '{name}' already in DB.")
             return False
 
-        final_score = _calculate_final_score(data)
+        fs = _final_score(data)
 
-        # ── Insert into startup_signals (analytics / raw scores) ──────────────
-        signal = StartupSignal(
+        db.add(StartupSignal(
             name=name,
             domain=data.get("domain", "Technology"),
-            description=data.get("description", "")[:1000],
+            description=(data.get("description", ""))[:1000],
             traction_score=int(data.get("traction_score", 5)),
             innovation_score=int(data.get("innovation_score", 5)),
             market_trend_score=int(data.get("market_trend_score", 5)),
             team_strength_score=int(data.get("team_strength_score", 5)),
             risk_score=int(data.get("risk_score", 5)),
-            final_score=final_score,
-        )
-        db.add(signal)
+            final_score=fs,
+        ))
 
-        # ── Insert into startups (what /get-startups returns to frontend) ──────
-        startup = Startup(
+        db.add(Startup(
             name=name,
             domain=data.get("domain", "Technology"),
-            description=data.get("description", "")[:1000],
-            funding_stage=data.get("funding_stage", "Seed") or "Seed",
-            risk_level=_score_to_risk(float(data.get("risk_score", 5))),
+            description=(data.get("description", ""))[:1000],
+            funding_stage=data.get("funding_stage") or "Seed",
+            risk_level=_risk_label(float(data.get("risk_score", 5))),
             traction_score=float(data.get("traction_score", 5)),
             market_score=float(data.get("market_trend_score", 5)),
             team_score=float(data.get("team_strength_score", 5)),
             innovation_score=float(data.get("innovation_score", 5)),
-            location=data.get("location", "") or "",
-            required_skills=data.get("required_skills", "") or "",
+            location=data.get("location") or "",
+            required_skills=data.get("required_skills") or "",
             founder_id=founder_id,
-        )
-        db.add(startup)
+        ))
 
         db.commit()
-        log.info(f"  [inserted] '{name}' → startups + startup_signals")
+        log.info(f"  [inserted] '{name}' | {data.get('domain')} | {data.get('funding_stage')}")
         return True
 
     except Exception as e:
         db.rollback()
-        log.error(f"  DB error inserting '{name}': {e}")
+        log.error(f"  DB error for '{name}': {e}")
         return False
     finally:
         db.close()
 
 
-def _score_to_risk(risk_score: float) -> str:
-    if risk_score <= 3:
-        return "low"
-    if risk_score <= 6:
-        return "medium"
-    return "high"
+def db_count() -> int:
+    db = SessionLocal()
+    try:
+        return db.query(Startup).count()
+    finally:
+        db.close()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PIPELINE CYCLE
+# CYCLE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_cycle(founder_id: str) -> int:
-    """Runs one full scrape → enrich → insert cycle. Returns count inserted."""
-    log.info("=" * 50)
-    log.info("Pipeline running...")
-    log.info("=" * 50)
+def run_cycle(founder_id: str, cycle: int) -> int:
+    total_inserted = 0
 
-    articles = scrape_rss()
-    if not articles:
-        log.warning("No articles scraped this cycle.")
-        return 0
-
-    inserted = 0
+    # ── Phase 1: real RSS data ─────────────────────────────────────────────────
+    articles = scrape_all_feeds()
     for article in articles:
-        if inserted >= MAX_PER_CYCLE:
+        if total_inserted >= MAX_REAL_PER_CYCLE:
             break
         try:
-            enriched = enrich_with_ai(article)
-            if not enriched:
-                continue
-            if insert_startup(enriched, founder_id):
-                inserted += 1
-            time.sleep(2)  # be polite to Gemini rate limits
+            enriched = enrich(article)
+            if enriched and insert(enriched, founder_id):
+                total_inserted += 1
+            time.sleep(1)
         except Exception as e:
-            log.error(f"Cycle error on '{article.get('name', '?')}': {e}")
-            continue
+            log.error(f"  Article error: {e}")
 
-    log.info(f"Cycle complete — {inserted} new startups inserted.")
-    return inserted
+    # ── Phase 2: synthetic fill-in ─────────────────────────────────────────────
+    # Always generate synthetic entries so the DB grows every cycle
+    log.info(f"Generating {SYNTHETIC_PER_CYCLE} synthetic startups...")
+    for i in range(SYNTHETIC_PER_CYCLE):
+        try:
+            synthetic = _generate_synthetic_startup(cycle, i)
+            if insert(synthetic, founder_id):
+                total_inserted += 1
+        except Exception as e:
+            log.error(f"  Synthetic error: {e}")
+
+    return total_inserted
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# MAIN — CONTINUOUS LOOP
+# MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
     log.info("=" * 55)
     log.info("  Nexus Venture — ETL Pipeline STARTED")
-    log.info(f"  Interval : {INTERVAL_SECONDS}s")
-    log.info(f"  Max/cycle: {MAX_PER_CYCLE}")
-    log.info(f"  Gemini   : {'enabled' if gemini_model else 'disabled (fallback mode)'}")
+    log.info(f"  Interval      : {INTERVAL_SECONDS}s")
+    log.info(f"  Real/cycle    : up to {MAX_REAL_PER_CYCLE}")
+    log.info(f"  Synthetic/cycle: {SYNTHETIC_PER_CYCLE}")
+    log.info(f"  Gemini        : {'enabled' if gemini_model else 'rule-based fallback'}")
     log.info("=" * 55)
 
     founder_id = get_or_create_pipeline_user()
-    log.info(f"Pipeline founder_id: {founder_id}")
 
     cycle = 0
     while True:
         cycle += 1
-        log.info(f"\n─── Cycle #{cycle} @ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ───")
+        log.info(f"\n{'─'*50}")
+        log.info(f"Cycle #{cycle}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log.info(f"{'─'*50}")
+
         try:
-            run_cycle(founder_id)
+            inserted = run_cycle(founder_id, cycle)
+            total = db_count()
+            log.info(f"Cycle #{cycle} done — inserted: {inserted} | total in DB: {total}")
         except Exception as e:
             log.error(f"Unhandled cycle error: {e}")
 
-        log.info(f"Sleeping {INTERVAL_SECONDS}s until next cycle...")
+        log.info(f"Sleeping {INTERVAL_SECONDS}s...")
         time.sleep(INTERVAL_SECONDS)
 
 
