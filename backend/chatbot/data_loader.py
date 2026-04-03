@@ -76,14 +76,14 @@ def load_startups_from_db(db: Session) -> pd.DataFrame:
         records = []
         for s in rows:
             records.append({
-                "startup_id": str(s.id),
-                "name":             s.name or "",
-                "domain":           (s.domain or "").lower(),
-                "description":      (s.description or "").lower(),
-                "problem_statement": "",          # not in current model
-                "funding_stage":    (getattr(s, "funding_stage", "") or "").lower(),
-                "required_skills":  "",           # not in current model
-                "location":         "",           # not in current model
+                "startup_id":        str(s.id),
+                "name":              s.name or "",
+                "domain":            (s.domain or "").lower(),
+                "description":       (s.description or "").lower(),
+                "problem_statement": (s.description or "").lower(),  # reuse description
+                "funding_stage":     (getattr(s, "funding_stage", "") or "").lower(),
+                "required_skills":   (getattr(s, "required_skills", "") or "").lower(),
+                "location":          (getattr(s, "location", "") or "").lower(),
             })
         return pd.DataFrame(records)
     except Exception as e:
@@ -108,11 +108,11 @@ def load_users_from_db(db: Session) -> pd.DataFrame:
                 "user_id":                str(u.id),
                 "name":                   u.name or "",
                 "role":                   (u.role or "member").lower(),
-                "skills":                 (u.bio or "").lower(),
+                "skills":                 (getattr(u, "skills", "") or u.bio or "").lower(),
                 "interests":              (u.interests or "").lower(),
-                "experience_level":       "",
-                "preferred_funding_stage": "",
-                "location":               "",
+                "experience_level":       (getattr(u, "experience_level", "") or "").lower(),
+                "preferred_funding_stage": (getattr(u, "preferred_funding_stage", "") or "").lower(),
+                "location":               (getattr(u, "location", "") or "").lower(),
             })
         return pd.DataFrame(records)
     except Exception as e:
