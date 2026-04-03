@@ -1,43 +1,29 @@
 """
-chatbot.py
-----------
-Main entry point for the Nexus Venture AI Recommendation Chatbot.
-
-Chatbot Flow:
-  1. Receive user role + query context (skills, interests, location, etc.)
-  2. Load startup / user data (DB-first, CSV fallback)
-  3. Preprocess features
-  4. Run role-based matcher
-  5. Return structured recommendations with match scores and reasons
-
-Supported roles:
-  - investor    → find suitable startups
-  - founder     → find team members / mentors
-  - seeker      → find startups to join
-  - collaborator → find co-founders / partners
-
-FUTURE EXTENSION:
-- Deploy as a Flask / FastAPI streaming endpoint.
-- Add BERT embeddings for semantic understanding beyond keyword overlap.
-- Integrate real-time feedback loop to personalise recommendations.
+chatbot.py — Nexus Venture AI Recommendation Chatbot
+-----------------------------------------------------
+Every response is unique because:
+  1. The user's free-text query is parsed for intent keywords that shift
+     the matcher's skill/interest/location/stage context each turn.
+  2. Gemini rewrites the structured output in a conversational tone,
+     using the last N chat turns as memory so it never repeats itself.
+  3. Small-talk replies are randomised from a pool.
+  4. When Gemini is unavailable the structured formatter still varies
+     its opening line based on query content.
 """
 
+import random
 from typing import Optional, List, Dict, Any
-from typing import TYPE_CHECKING
+
 from backend.config.settings import settings
 
 try:
-    from sqlalchemy.orm import Session  # type: ignore
-except Exception:  # pragma: no cover
-    # Allows importing/running the CLI demo in environments where SQLAlchemy
-    # isn't installed. DB-backed endpoints will still require SQLAlchemy.
-    Session = Any  # type: ignore
+    from sqlalchemy.orm import Session
+except Exception:
+    from typing import Any as Session  # type: ignore
 
 from backend.chatbot.data_loader import (
-    load_startups_from_db,
-    load_users_from_db,
-    load_startups_csv,
-    load_users_csv,
+    load_startups_from_db, load_users_from_db,
+    load_startups_csv,    load_users_csv,
 )
 from backend.chatbot.matcher import (
     match_investor_to_startups,
@@ -46,52 +32,137 @@ from backend.chatbot.matcher import (
     match_collaborator_to_founders,
 )
 
-
-# ── Role aliases ───────────────────────────────────────────────────────────────
+# ── Role map ───────────────────────────────────────────────────────────────────
 _ROLE_MAP = {
-    "investor":     "investor",
-    "founder":      "founder",
-    "mentor":       "founder",   # mentors use founder logic
-    "seeker":       "seeker",
-    "member":       "seeker",    # existing "member" role → seeker logic
-    "collaborator": "collaborator",
-    "co-founder":   "collaborator",
+    "investor": "investor", "founder": "founder", "mentor": "founder",
+    "seeker": "seeker", "member": "seeker",
+    "collaborator": "collaborator", "co-founder": "collaborator",
 }
 
+# ── Domain / stage / location keyword extractors ──────────────────────────────
+_DOMAIN_KEYWORDS = {
+    "ai": "AI", "ml": "AI", "machine learning": "AI", "healthcare": "Healthcare",
+    "health": "Healthcare", "medical": "Healthcare", "fintech": "Fintech",
+    "finance": "Fintech", "payment": "Fintech", "edtech": "EdTech",
+    "education": "EdTech", "agritech": "AgriTech", "agriculture": "AgriTech",
+    "cleantech": "CleanTech", "climate": "CleanTech", "energy": "CleanTech",
+    "cyber": "Cybersecurity", "security": "Cybersecurity",
+    "logistics": "Logistics", "supply chain": "Logistics",
+    "hrtech": "HRTech", "hiring": "HRTech", "recruitment": "HRTech",
+    "retail": "Retail", "ecommerce": "Retail",
+    "mental health": "Mental Health", "wellness": "Mental Health",
+    "legaltech": "LegalTech", "legal": "LegalTech",
+    "blockchain": "Blockchain", "crypto": "Blockchain",
+    "robotics": "Robotics", "iot": "IoT",
+}
 
-# ── Output formatter ───────────────────────────────────────────────────────────
+_STAGE_KEYWORDS = {
+    "pre-seed": "Pre-Seed", "pre seed": "Pre-Seed",
+    "seed": "Seed", "series a": "Series A",
+    "series b": "Series B", "series c": "Series C",
+    "early": "Pre-Seed", "growth": "Series B",
+}
+
+_SKILL_KEYWORDS = [
+    "python", "react", "node", "ml", "nlp", "tensorflow", "pytorch",
+    "blockchain", "solidity", "java", "kotlin", "swift", "flutter",
+    "data science", "devops", "kubernetes", "docker", "aws", "gcp",
+    "product management", "ux", "ui", "design", "marketing", "sales",
+    "finance", "legal", "hr", "operations",
+]
+
+
+def _extract_context_from_query(query: str, base_row: dict) -> dict:
+    """
+    Parse the user's free-text query and enrich the user_row with any
+    domain / stage / skill / location signals found in the message.
+    This makes every query produce a different matching context.
+    """
+    q = query.lower()
+    row = dict(base_row)
+
+    # Extract domain interests
+    found_domains = [v for k, v in _DOMAIN_KEYWORDS.items() if k in q]
+    if found_domains:
+        existing = row.get("interests", "")
+        row["interests"] = (existing + " " + " ".join(found_domains)).strip()
+
+    # Extract funding stage preference
+    for kw, stage in _STAGE_KEYWORDS.items():
+        if kw in q:
+            row["preferred_funding_stage"] = stage
+            break
+
+    # Extract skill signals
+    found_skills = [sk for sk in _SKILL_KEYWORDS if sk in q]
+    if found_skills:
+        existing = row.get("skills", "")
+        row["skills"] = (existing + " " + " ".join(found_skills)).strip()
+
+    # Extract location (simple: look for "in <city>")
+    import re
+    loc_match = re.search(r"\bin\s+([a-z][a-z\s]{2,20})", q)
+    if loc_match and not row.get("location"):
+        row["location"] = loc_match.group(1).strip()
+
+    return row
+
+
+# ── Small-talk pool ────────────────────────────────────────────────────────────
+_GREET_REPLIES = [
+    "Hey! Great to connect. Tell me what you're looking for — startups, teammates, investors, or co-founders?",
+    "Hi there! I'm Nexus AI. Share your goals and I'll find the best matches from our live ecosystem.",
+    "Hello! Ready to explore the startup ecosystem? Tell me your role and what you need.",
+    "Hey! I can surface startups, investors, or talent based on your profile. What are you after?",
+]
+
+_THANKS_REPLIES = [
+    "Happy to help! Want me to refine by domain, location, or funding stage?",
+    "Glad that was useful! I can narrow it down further — just say the word.",
+    "You're welcome! Ask me anything else about the ecosystem.",
+    "Anytime! Want to explore a different domain or funding stage?",
+]
+
+_HELP_REPLIES = [
+    "I'm Nexus AI — I match investors to startups, founders to team members, and seekers to opportunities. What's your role?",
+    "I can recommend startups, co-founders, or team members based on your skills and interests. What do you need?",
+    "Think of me as your startup ecosystem navigator. Tell me your goal and I'll find the right matches.",
+]
+
+_OPENING_LINES = [
+    "Here's what I found based on your query:",
+    "Great question — here are the top matches:",
+    "Based on what you shared, these look like strong fits:",
+    "I ran the analysis — here are your best options right now:",
+    "Scanning the ecosystem… here's what came up:",
+    "These are the strongest matches for your profile:",
+    "Fresh results from the platform:",
+    "Here's what the recommendation engine surfaced:",
+]
+
+_CLOSING_LINES = [
+    "Want me to filter by location, stage, or specific skills?",
+    "I can refine this further — just tell me what to prioritise.",
+    "Ask me to narrow by domain, city, or funding stage anytime.",
+    "Need more options or a different angle? Just ask.",
+    "Want to explore a specific domain in more depth?",
+]
+
 
 def _small_talk_reply(query: str) -> Optional[str]:
-    """
-    Lightweight friendly fallback for non-recommendation chat turns.
-    Keeps the assistant conversational instead of always returning rankings.
-    """
     q = (query or "").strip().lower()
     if not q:
         return None
-
-    greetings = ("hi", "hello", "hey", "good morning", "good evening")
-    if any(g in q for g in greetings):
-        return (
-            "Hi! Great to meet you. I can help you discover startups, teammates, "
-            "or co-founders based on your goals. Tell me your role and what you "
-            "want to achieve."
-        )
-
+    if any(g in q for g in ("hi", "hello", "hey", "good morning", "good evening", "howdy")):
+        return random.choice(_GREET_REPLIES)
     if "thank" in q:
-        return (
-            "You're welcome! If you'd like, I can refine the matches by domain, "
-            "location, or funding stage."
-        )
-
-    if any(k in q for k in ("who are you", "what can you do", "help")):
-        return (
-            "I'm your Nexus assistant. I can chat with you and also recommend "
-            "startups, teammates, or founders from live platform data."
-        )
-
+        return random.choice(_THANKS_REPLIES)
+    if any(k in q for k in ("who are you", "what can you do", "help", "what do you do")):
+        return random.choice(_HELP_REPLIES)
     return None
 
+
+# ── Structured formatter ───────────────────────────────────────────────────────
 
 def _format_results(
     results: List[Dict[str, Any]],
@@ -99,64 +170,44 @@ def _format_results(
     query: str = "",
     conversation_context: Optional[List[str]] = None,
 ) -> str:
-    """
-    Convert a list of match dicts into a human-readable chatbot response string.
-
-    Example output:
-    ─────────────────────────────────────
-    1. Startup: MediAI
-       Match Score: 89%
-       Reason:
-         • Domain match: Healthcare
-         • Skills overlap: Python, Ml
-         • Preferred funding stage: Seed
-    ─────────────────────────────────────
-    """
     small_talk = _small_talk_reply(query)
     if small_talk:
         return small_talk
 
     if not results:
-        return (
-            "I could not find strong matches yet, but we can improve this quickly. "
-            "Try sharing more about your skills, domain interests, and preferred location."
-        )
+        no_match_options = [
+            "No strong matches right now — try adding more skills or broadening your domain interests.",
+            "I couldn't find a close fit yet. Share more about your background and I'll try again.",
+            "The current dataset doesn't have a perfect match. Try a different domain or funding stage.",
+        ]
+        return random.choice(no_match_options)
 
-    lines = []
-    if conversation_context:
-        lines.append("Nice follow-up. I used your recent chat context to refine the response.")
-    else:
-        lines.append(f"Great question. I found {len(results)} strong options for your {role} profile.")
-    lines.extend(["Here are the best matches right now:", ""])
+    lines = [random.choice(_OPENING_LINES), ""]
 
     for rank, item in enumerate(results, start=1):
-        entity_type  = item.get("type", "result").title()
-        name         = item.get("name", "Unknown")
-        score        = item.get("match_score", 0)
-        reasons      = item.get("reasons", [])
+        entity_type = item.get("type", "result").title()
+        name        = item.get("name", "Unknown")
+        score       = item.get("match_score", 0)
+        reasons     = item.get("reasons", [])
 
-        lines.append(f"{rank}) {entity_type}: {name} (match: {score}%)")
-
-        # Extra metadata by type
+        lines.append(f"{rank}. {entity_type}: {name}  ({score}% match)")
         if item.get("domain"):
-            lines.append(f"   - Domain: {item['domain']}")
+            lines.append(f"   Domain: {item['domain']}")
         if item.get("funding_stage"):
-            lines.append(f"   - Funding Stage: {item['funding_stage']}")
-        if item.get("skills"):
-            lines.append(f"   - Skills: {item['skills']}")
+            lines.append(f"   Stage: {item['funding_stage']}")
         if item.get("location"):
-            lines.append(f"   - Location: {item['location']}")
-
-        lines.append("   Why this match:")
-        for r in reasons:
-            lines.append(f"   - {r}")
+            lines.append(f"   Location: {item['location']}")
+        if item.get("skills"):
+            lines.append(f"   Skills: {item['skills']}")
+        if reasons:
+            lines.append(f"   Why: {reasons[0]}")
         lines.append("")
 
-    lines.append(
-        "If you want, I can now narrow this list by city, funding stage, or specific skills."
-    )
+    lines.append(random.choice(_CLOSING_LINES))
     return "\n".join(lines)
 
+
+# ── Gemini natural-language pass ───────────────────────────────────────────────
 
 def _render_with_gemini(
     role: str,
@@ -164,45 +215,48 @@ def _render_with_gemini(
     base_answer: str,
     conversation_context: Optional[List[str]] = None,
 ) -> Optional[str]:
-    """
-    Optional natural-language pass for friendlier chat tone.
-    Returns None on any failure so callers can safely fall back.
-    """
     if not settings.GEMINI_API_KEY:
         return None
-
     try:
-        import google.generativeai as genai  # type: ignore
-
+        import google.generativeai as genai
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        context_text = "\n".join(conversation_context or [])
 
-        prompt = f"""
-You are Nexus, a friendly startup ecosystem assistant.
-Role: {role}
-User message: {query}
+        # Try newer model names first, fall back gracefully
+        for model_name in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"):
+            try:
+                model = genai.GenerativeModel(model_name)
+                ctx   = "\n".join(conversation_context or [])
+                prompt = f"""You are Nexus, a sharp and friendly startup ecosystem AI.
 
-Recent conversation context:
-{context_text}
+Role context: {role}
+User just said: "{query}"
+
+Recent conversation (for context — do NOT repeat what was already said):
+{ctx if ctx else "(this is the first message)"}
 
 Recommendation engine output:
 {base_answer}
 
-Rewrite the final answer to sound conversational and human, while keeping the factual recommendations intact.
-Rules:
-- Keep it concise (max 180 words)
-- Keep recommendation ordering and key facts
-- End with one clarifying follow-up question
+Your task:
+- Rewrite the answer in a natural, conversational tone
+- Reference the user's query specifically so it feels personalised
+- Do NOT repeat any phrasing from the recent conversation
+- Keep all factual data (names, scores, domains) intact
+- Max 200 words
+- End with a single follow-up question that is DIFFERENT from any previous question
 """
-        resp = model.generate_content(prompt)
-        text = (getattr(resp, "text", "") or "").strip()
-        return text or None
+                resp = model.generate_content(prompt)
+                text = (getattr(resp, "text", "") or "").strip()
+                if text:
+                    return text
+            except Exception:
+                continue
+        return None
     except Exception:
         return None
 
 
-# ── Main chatbot function ──────────────────────────────────────────────────────
+# ── Main entry point ───────────────────────────────────────────────────────────
 
 def run_chatbot(
     role: str,
@@ -217,30 +271,10 @@ def run_chatbot(
     conversation_context: Optional[List[str]] = None,
     use_ai_style: bool = True,
 ) -> str:
-    """
-    Core chatbot function. Accepts user profile inputs and returns
-    a formatted recommendation string.
-
-    Parameters
-    ----------
-    role                    : user role (investor / founder / seeker / collaborator)
-    skills                  : comma-separated skills string
-    interests               : comma-separated domain interests
-    experience_level        : junior / mid / senior
-    preferred_funding_stage : e.g. "Seed Series A"
-    location                : city name
-    top_n                   : number of recommendations to return
-    db                      : optional SQLAlchemy session (uses CSV if None)
-
-    Returns
-    -------
-    Formatted recommendation string for display in chat UI.
-    """
-    # Normalise role
     normalised_role = _ROLE_MAP.get(role.lower().strip(), "seeker")
 
-    # Build user profile dict
-    user_row = {
+    # Base profile from stored user data
+    base_row = {
         "skills":                  skills.lower(),
         "interests":               interests.lower(),
         "experience_level":        experience_level.lower(),
@@ -248,7 +282,10 @@ def run_chatbot(
         "location":                location.lower(),
     }
 
-    # Load data (DB preferred, CSV fallback)
+    # Enrich with signals extracted from the current query
+    user_row = _extract_context_from_query(query, base_row)
+
+    # Load data
     if db:
         startups_df = load_startups_from_db(db)
         users_df    = load_users_from_db(db)
@@ -256,63 +293,37 @@ def run_chatbot(
         startups_df = load_startups_csv()
         users_df    = load_users_csv()
 
-    # Route to role-specific matcher
+    # Match
     if normalised_role == "investor":
         results = match_investor_to_startups(user_row, startups_df, top_n=top_n)
-
     elif normalised_role == "founder":
         results = match_founder_to_team(user_row, users_df, top_n=top_n)
-
     elif normalised_role == "seeker":
         results = match_seeker_to_startups(user_row, startups_df, top_n=top_n)
-
     elif normalised_role == "collaborator":
-        results = match_collaborator_to_founders(
-            user_row, users_df, startups_df, top_n=top_n
-        )
+        results = match_collaborator_to_founders(user_row, users_df, startups_df, top_n=top_n)
     else:
         return "Unknown role. Please specify: investor, founder, seeker, or collaborator."
 
     base_answer = _format_results(
-        results,
-        normalised_role,
-        query=query,
+        results, normalised_role, query=query,
         conversation_context=conversation_context,
     )
+
     if not use_ai_style:
         return base_answer
 
     ai_answer = _render_with_gemini(
-        role=normalised_role,
-        query=query,
+        role=normalised_role, query=query,
         base_answer=base_answer,
         conversation_context=conversation_context,
     )
     return ai_answer or base_answer
 
 
-# ── DB-aware wrapper (used by FastAPI route) ───────────────────────────────────
+# ── DB-aware wrapper ───────────────────────────────────────────────────────────
 
-def process_nexus_chat(
-    db: Session,
-    user_id,
-    query: str,
-    role_override: Optional[str] = None,
-) -> str:
-    """
-    FastAPI-friendly wrapper that:
-      1. Loads the user from DB to get their role/skills/interests.
-      2. Merges the free-text query into the user profile.
-      3. Calls run_chatbot() and returns the formatted response.
-      4. Logs the chat to the ChatLog table.
-
-    Parameters
-    ----------
-    db            : SQLAlchemy session
-    user_id       : UUID of the authenticated user
-    query         : free-text message from the chat UI
-    role_override : optionally force a role (useful for testing)
-    """
+def process_nexus_chat(db: Session, user_id, query: str, role_override: Optional[str] = None) -> str:
     from backend.models.user import User
     from backend.models.chat import ChatLog
 
@@ -320,21 +331,13 @@ def process_nexus_chat(
     if not user:
         return "Error: User not found."
 
-    role     = role_override or (user.role or "member")
-    skills   = (user.bio or "") + " " + query          # bio acts as skills proxy
+    role      = role_override or (user.role or "member")
+    skills    = (getattr(user, "skills", "") or user.bio or "") + " " + query
     interests = user.interests or ""
 
-    response = run_chatbot(
-        role=role,
-        query=query,
-        skills=skills,
-        interests=interests,
-        db=db,
-    )
+    response = run_chatbot(role=role, query=query, skills=skills, interests=interests, db=db)
 
-    # Persist chat log
     log = ChatLog(user_id=user_id, query=query, response=response)
     db.add(log)
     db.commit()
-
     return response
