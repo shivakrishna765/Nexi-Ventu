@@ -1,0 +1,16 @@
+user_id,name,role,skills,interests,experience_level,preferred_funding_stage,location
+U001,Arjun Mehta,investor,Finance Investment Portfolio Management,Fintech Healthcare AI,Senior,Seed Series A,Mumbai
+U002,Priya Sharma,founder,Python ML NLP Product Management,AI EdTech Healthcare,Mid,Pre-Seed Seed,Delhi
+U003,Rahul Verma,seeker,Python Data Science Machine Learning TensorFlow,AI Healthcare AgriTech,Junior,Seed,Bangalore
+U004,Sneha Patel,collaborator,React Node.js Python Full Stack,Fintech EdTech HRTech,Mid,Pre-Seed Seed,Mumbai
+U005,Vikram Singh,investor,Venture Capital Due Diligence Portfolio,CleanTech AgriTech Logistics,Senior,Series A Series B,Hyderabad
+U006,Ananya Roy,seeker,NLP Python Transformers BERT,AI LegalTech HRTech,Mid,Pre-Seed Seed,Chennai
+U007,Karan Joshi,founder,Blockchain Solidity Python Smart Contracts,Fintech Logistics Healthcare,Senior,Seed Series A,Bangalore
+U008,Meera Nair,collaborator,UI UX Design Figma React,EdTech Mental Health Retail,Junior,Pre-Seed,Delhi
+U009,Deepak Kumar,seeker,IoT Embedded Systems Python C++,CleanTech AgriTech Logistics,Mid,Seed Series A,Pune
+U010,Lakshmi Iyer,investor,Angel Investing Startup Mentoring Finance,Healthcare Mental Health EdTech,Senior,Pre-Seed Seed,Chennai
+U011,Rohan Das,founder,Computer Vision Python OpenCV TensorFlow,Healthcare AgriTech Retail,Mid,Seed,Hyderabad
+U012,Nisha Gupta,collaborator,Data Science Python R Statistics,Fintech CleanTech AgriTech,Senior,Series A Series B,Mumbai
+U013,Aditya Rao,seeker,Cybersecurity Network Security Python Ethical Hacking,Cybersecurity Fintech Healthcare,Mid,Seed Series A,Bangalore
+U014,Pooja Reddy,founder,React Node.js MongoDB Express Product,EdTech HRTech Retail,Junior,Pre-Seed,Delhi
+U015,Suresh Babu,investor,Private Equity M&A Corporate Finance,Logistics Retail CleanTech,Senior,Series B Series C,Mumbai

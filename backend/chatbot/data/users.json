@@ -1,0 +1,152 @@
+[
+  {
+    "user_id": "U001",
+    "name": "Arjun Mehta",
+    "role": "investor",
+    "skills": "Finance Investment Portfolio Management",
+    "interests": "Fintech Healthcare AI",
+    "experience_level": "Senior",
+    "preferred_funding_stage": "Seed Series A",
+    "location": "Mumbai"
+  },
+  {
+    "user_id": "U002",
+    "name": "Priya Sharma",
+    "role": "founder",
+    "skills": "Python ML NLP Product Management",
+    "interests": "AI EdTech Healthcare",
+    "experience_level": "Mid",
+    "preferred_funding_stage": "Pre-Seed Seed",
+    "location": "Delhi"
+  },
+  {
+    "user_id": "U003",
+    "name": "Rahul Verma",
+    "role": "seeker",
+    "skills": "Python Data Science Machine Learning TensorFlow",
+    "interests": "AI Healthcare AgriTech",
+    "experience_level": "Junior",
+    "preferred_funding_stage": "Seed",
+    "location": "Bangalore"
+  },
+  {
+    "user_id": "U004",
+    "name": "Sneha Patel",
+    "role": "collaborator",
+    "skills": "React Node.js Python Full Stack",
+    "interests": "Fintech EdTech HRTech",
+    "experience_level": "Mid",
+    "preferred_funding_stage": "Pre-Seed Seed",
+    "location": "Mumbai"
+  },
+  {
+    "user_id": "U005",
+    "name": "Vikram Singh",
+    "role": "investor",
+    "skills": "Venture Capital Due Diligence Portfolio",
+    "interests": "CleanTech AgriTech Logistics",
+    "experience_level": "Senior",
+    "preferred_funding_stage": "Series A Series B",
+    "location": "Hyderabad"
+  },
+  {
+    "user_id": "U006",
+    "name": "Ananya Roy",
+    "role": "seeker",
+    "skills": "NLP Python Transformers BERT",
+    "interests": "AI LegalTech HRTech",
+    "experience_level": "Mid",
+    "preferred_funding_stage": "Pre-Seed Seed",
+    "location": "Chennai"
+  },
+  {
+    "user_id": "U007",
+    "name": "Karan Joshi",
+    "role": "founder",
+    "skills": "Blockchain Solidity Python Smart Contracts",
+    "interests": "Fintech Logistics Healthcare",
+    "experience_level": "Senior",
+    "preferred_funding_stage": "Seed Series A",
+    "location": "Bangalore"
+  },
+  {
+    "user_id": "U008",
+    "name": "Meera Nair",
+    "role": "collaborator",
+    "skills": "UI UX Design Figma React",
+    "interests": "EdTech Mental Health Retail",
+    "experience_level": "Junior",
+    "preferred_funding_stage": "Pre-Seed",
+    "location": "Delhi"
+  },
+  {
+    "user_id": "U009",
+    "name": "Deepak Kumar",
+    "role": "seeker",
+    "skills": "IoT Embedded Systems Python C++",
+    "interests": "CleanTech AgriTech Logistics",
+    "experience_level": "Mid",
+    "preferred_funding_stage": "Seed Series A",
+    "location": "Pune"
+  },
+  {
+    "user_id": "U010",
+    "name": "Lakshmi Iyer",
+    "role": "investor",
+    "skills": "Angel Investing Startup Mentoring Finance",
+    "interests": "Healthcare Mental Health EdTech",
+    "experience_level": "Senior",
+    "preferred_funding_stage": "Pre-Seed Seed",
+    "location": "Chennai"
+  },
+  {
+    "user_id": "U011",
+    "name": "Rohan Das",
+    "role": "founder",
+    "skills": "Computer Vision Python OpenCV TensorFlow",
+    "interests": "Healthcare AgriTech Retail",
+    "experience_level": "Mid",
+    "preferred_funding_stage": "Seed",
+    "location": "Hyderabad"
+  },
+  {
+    "user_id": "U012",
+    "name": "Nisha Gupta",
+    "role": "collaborator",
+    "skills": "Data Science Python R Statistics",
+    "interests": "Fintech CleanTech AgriTech",
+    "experience_level": "Senior",
+    "preferred_funding_stage": "Series A Series B",
+    "location": "Mumbai"
+  },
+  {
+    "user_id": "U013",
+    "name": "Aditya Rao",
+    "role": "seeker",
+    "skills": "Cybersecurity Network Security Python Ethical Hacking",
+    "interests": "Cybersecurity Fintech Healthcare",
+    "experience_level": "Mid",
+    "preferred_funding_stage": "Seed Series A",
+    "location": "Bangalore"
+  },
+  {
+    "user_id": "U014",
+    "name": "Pooja Reddy",
+    "role": "founder",
+    "skills": "React Node.js MongoDB Express Product",
+    "interests": "EdTech HRTech Retail",
+    "experience_level": "Junior",
+    "preferred_funding_stage": "Pre-Seed",
+    "location": "Delhi"
+  },
+  {
+    "user_id": "U015",
+    "name": "Suresh Babu",
+    "role": "investor",
+    "skills": "Private Equity M&A Corporate Finance",
+    "interests": "Logistics Retail CleanTech",
+    "experience_level": "Senior",
+    "preferred_funding_stage": "Series B Series C",
+    "location": "Mumbai"
+  }
+]

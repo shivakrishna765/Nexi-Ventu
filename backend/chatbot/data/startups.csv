@@ -1,0 +1,16 @@
+startup_id,name,domain,description,problem_statement,funding_stage,required_skills,location
+S001,MediAI,Healthcare,AI-powered diagnostic assistant for rural clinics using image recognition and NLP,Lack of specialist doctors in rural areas,Seed,Python ML TensorFlow NLP Computer Vision,Bangalore
+S002,FinFlow,Fintech,Automated personal finance manager with ML-based spending predictions and investment advice,Poor financial literacy and manual budgeting,Series A,Python Data Science React Node.js,Mumbai
+S003,EduBot,EdTech,Adaptive learning platform using NLP to personalize curriculum for K-12 students,One-size-fits-all education failing diverse learners,Pre-Seed,NLP Python React Machine Learning,Delhi
+S004,GreenGrid,CleanTech,IoT-based smart energy management system for commercial buildings,High energy waste in commercial infrastructure,Series B,IoT Embedded Systems Python Data Analytics,Hyderabad
+S005,AgriSense,AgriTech,Drone and satellite data analytics for precision farming and crop yield prediction,Farmers lack data-driven insights for crop management,Seed,Computer Vision Python Data Science Drone Tech,Pune
+S006,LegalEase,LegalTech,NLP-powered contract analysis and legal document automation for SMEs,Legal services too expensive and slow for small businesses,Pre-Seed,NLP Python React Legal Knowledge,Chennai
+S007,CyberShield,Cybersecurity,AI-driven threat detection and automated incident response platform,Rising cyberattacks on SMEs with no dedicated security teams,Series A,Cybersecurity Python ML Network Security,Bangalore
+S008,SupplySync,Logistics,Blockchain-based supply chain transparency and real-time tracking platform,Lack of visibility and fraud in supply chains,Seed,Blockchain Python React Node.js,Mumbai
+S009,TalentMatch,HRTech,AI recruitment platform matching candidates to roles using semantic skill analysis,Inefficient hiring processes and poor candidate-job fit,Pre-Seed,NLP Python Machine Learning HR Knowledge,Delhi
+S010,RetailAI,Retail,Computer vision system for automated inventory management and shelf analytics,Manual inventory tracking is error-prone and costly,Series A,Computer Vision Python IoT Retail Analytics,Hyderabad
+S011,HealthChain,Healthcare,Blockchain-secured patient health records with interoperability across hospitals,Fragmented patient data causing medical errors,Seed,Blockchain Python Healthcare IT,Bangalore
+S012,ClimateTrack,CleanTech,Carbon footprint tracking and offset marketplace for enterprises,Enterprises struggle to measure and reduce carbon emissions,Series B,Data Analytics Python React Sustainability,Mumbai
+S013,RoboFarm,AgriTech,Autonomous robotic systems for harvesting and planting in large-scale farms,Labor shortage and high cost in agricultural operations,Series A,Robotics Python Computer Vision Embedded Systems,Pune
+S014,PayEasy,Fintech,Cross-border payment solution with real-time FX rates for freelancers and SMEs,High fees and delays in international payments,Seed,Blockchain Python Node.js Fintech,Chennai
+S015,MindSpace,Mental Health,AI-powered mental wellness app with CBT-based chatbot and therapist matching,Mental health stigma and lack of accessible therapy,Pre-Seed,NLP Python React Psychology,Delhi

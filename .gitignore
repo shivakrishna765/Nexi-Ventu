@@ -10,3 +10,7 @@ backend/.env
 *.sqlite3
 .vscode/
 seed_error.log
+hs_err_pid*.log
+frontend/node_modules/
+frontend/node_modules/
+frontend/dist/

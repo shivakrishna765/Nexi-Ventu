@@ -11,3 +11,4 @@ google-generativeai==0.5.3
 psycopg2-binary==2.9.9
 scikit-learn==1.4.2
 numpy==1.26.4
+pandas==2.2.2

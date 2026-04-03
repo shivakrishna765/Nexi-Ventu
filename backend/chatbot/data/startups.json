@@ -1,0 +1,152 @@
+[
+  {
+    "startup_id": "S001",
+    "name": "MediAI",
+    "domain": "Healthcare",
+    "description": "AI-powered diagnostic assistant for rural clinics using image recognition and NLP",
+    "problem_statement": "Lack of specialist doctors in rural areas",
+    "funding_stage": "Seed",
+    "required_skills": "Python ML TensorFlow NLP Computer Vision",
+    "location": "Bangalore"
+  },
+  {
+    "startup_id": "S002",
+    "name": "FinFlow",
+    "domain": "Fintech",
+    "description": "Automated personal finance manager with ML-based spending predictions and investment advice",
+    "problem_statement": "Poor financial literacy and manual budgeting",
+    "funding_stage": "Series A",
+    "required_skills": "Python Data Science React Node.js",
+    "location": "Mumbai"
+  },
+  {
+    "startup_id": "S003",
+    "name": "EduBot",
+    "domain": "EdTech",
+    "description": "Adaptive learning platform using NLP to personalize curriculum for K-12 students",
+    "problem_statement": "One-size-fits-all education failing diverse learners",
+    "funding_stage": "Pre-Seed",
+    "required_skills": "NLP Python React Machine Learning",
+    "location": "Delhi"
+  },
+  {
+    "startup_id": "S004",
+    "name": "GreenGrid",
+    "domain": "CleanTech",
+    "description": "IoT-based smart energy management system for commercial buildings",
+    "problem_statement": "High energy waste in commercial infrastructure",
+    "funding_stage": "Series B",
+    "required_skills": "IoT Embedded Systems Python Data Analytics",
+    "location": "Hyderabad"
+  },
+  {
+    "startup_id": "S005",
+    "name": "AgriSense",
+    "domain": "AgriTech",
+    "description": "Drone and satellite data analytics for precision farming and crop yield prediction",
+    "problem_statement": "Farmers lack data-driven insights for crop management",
+    "funding_stage": "Seed",
+    "required_skills": "Computer Vision Python Data Science Drone Tech",
+    "location": "Pune"
+  },
+  {
+    "startup_id": "S006",
+    "name": "LegalEase",
+    "domain": "LegalTech",
+    "description": "NLP-powered contract analysis and legal document automation for SMEs",
+    "problem_statement": "Legal services too expensive and slow for small businesses",
+    "funding_stage": "Pre-Seed",
+    "required_skills": "NLP Python React Legal Knowledge",
+    "location": "Chennai"
+  },
+  {
+    "startup_id": "S007",
+    "name": "CyberShield",
+    "domain": "Cybersecurity",
+    "description": "AI-driven threat detection and automated incident response platform",
+    "problem_statement": "Rising cyberattacks on SMEs with no dedicated security teams",
+    "funding_stage": "Series A",
+    "required_skills": "Cybersecurity Python ML Network Security",
+    "location": "Bangalore"
+  },
+  {
+    "startup_id": "S008",
+    "name": "SupplySync",
+    "domain": "Logistics",
+    "description": "Blockchain-based supply chain transparency and real-time tracking platform",
+    "problem_statement": "Lack of visibility and fraud in supply chains",
+    "funding_stage": "Seed",
+    "required_skills": "Blockchain Python React Node.js",
+    "location": "Mumbai"
+  },
+  {
+    "startup_id": "S009",
+    "name": "TalentMatch",
+    "domain": "HRTech",
+    "description": "AI recruitment platform matching candidates to roles using semantic skill analysis",
+    "problem_statement": "Inefficient hiring processes and poor candidate-job fit",
+    "funding_stage": "Pre-Seed",
+    "required_skills": "NLP Python Machine Learning HR Knowledge",
+    "location": "Delhi"
+  },
+  {
+    "startup_id": "S010",
+    "name": "RetailAI",
+    "domain": "Retail",
+    "description": "Computer vision system for automated inventory management and shelf analytics",
+    "problem_statement": "Manual inventory tracking is error-prone and costly",
+    "funding_stage": "Series A",
+    "required_skills": "Computer Vision Python IoT Retail Analytics",
+    "location": "Hyderabad"
+  },
+  {
+    "startup_id": "S011",
+    "name": "HealthChain",
+    "domain": "Healthcare",
+    "description": "Blockchain-secured patient health records with interoperability across hospitals",
+    "problem_statement": "Fragmented patient data causing medical errors",
+    "funding_stage": "Seed",
+    "required_skills": "Blockchain Python Healthcare IT",
+    "location": "Bangalore"
+  },
+  {
+    "startup_id": "S012",
+    "name": "ClimateTrack",
+    "domain": "CleanTech",
+    "description": "Carbon footprint tracking and offset marketplace for enterprises",
+    "problem_statement": "Enterprises struggle to measure and reduce carbon emissions",
+    "funding_stage": "Series B",
+    "required_skills": "Data Analytics Python React Sustainability",
+    "location": "Mumbai"
+  },
+  {
+    "startup_id": "S013",
+    "name": "RoboFarm",
+    "domain": "AgriTech",
+    "description": "Autonomous robotic systems for harvesting and planting in large-scale farms",
+    "problem_statement": "Labor shortage and high cost in agricultural operations",
+    "funding_stage": "Series A",
+    "required_skills": "Robotics Python Computer Vision Embedded Systems",
+    "location": "Pune"
+  },
+  {
+    "startup_id": "S014",
+    "name": "PayEasy",
+    "domain": "Fintech",
+    "description": "Cross-border payment solution with real-time FX rates for freelancers and SMEs",
+    "problem_statement": "High fees and delays in international payments",
+    "funding_stage": "Seed",
+    "required_skills": "Blockchain Python Node.js Fintech",
+    "location": "Chennai"
+  },
+  {
+    "startup_id": "S015",
+    "name": "MindSpace",
+    "domain": "Mental Health",
+    "description": "AI-powered mental wellness app with CBT-based chatbot and therapist matching",
+    "problem_statement": "Mental health stigma and lack of accessible therapy",
+    "funding_stage": "Pre-Seed",
+    "required_skills": "NLP Python React Psychology",
+    "location": "Delhi"
+  }
+]
