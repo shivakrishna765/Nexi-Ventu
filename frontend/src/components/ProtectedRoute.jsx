@@ -1,25 +1,32 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+// Canonical route for each role — single source of truth
 const ROLE_ROUTES = {
   investor:     "/investor-dashboard",
   founder:      "/founder-dashboard",
   seeker:       "/team-dashboard",
-  member:       "/team-dashboard",
+  member:       "/team-dashboard",   // legacy alias
   collaborator: "/collaborator-dashboard",
 };
 
+function normaliseRole(role) {
+  const r = (role || "").toLowerCase().trim();
+  return r === "member" ? "seeker" : r;
+}
+
 /**
- * ProtectedRoute — blocks unauthenticated users and enforces role-based access.
+ * ProtectedRoute
  *
  * Props:
- *   allowedRoles  — array of roles that may access this route (omit = any auth user)
- *   adminOnly     — if true, only is_admin users may access
+ *   allowedRoles  — string[] of roles allowed (omit = any authenticated user)
+ *   adminOnly     — boolean, only is_admin users
  */
 export default function ProtectedRoute({ children, allowedRoles, adminOnly = false }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
+  // Still validating token — show spinner, don't redirect yet
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -28,23 +35,23 @@ export default function ProtectedRoute({ children, allowedRoles, adminOnly = fal
     );
   }
 
-  // Not logged in → send to login
+  // Not authenticated → go to login, remember where they were
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Admin-only route
+  // Admin gate
   if (adminOnly && !user.is_admin) {
     return <Navigate to="/" replace />;
   }
 
-  // Role-restricted route
+  // Role gate
   if (allowedRoles && allowedRoles.length > 0) {
-    const normalised = (user.role || "member").toLowerCase();
-    const effective  = normalised === "member" ? "seeker" : normalised;
-    if (!allowedRoles.includes(effective)) {
-      const redirect = ROLE_ROUTES[normalised] || "/team-dashboard";
-      return <Navigate to={redirect} replace />;
+    const effective = normaliseRole(user.role);
+    if (!allowedRoles.map(normaliseRole).includes(effective)) {
+      // Send them to their own dashboard instead of a 403
+      const ownRoute = ROLE_ROUTES[effective] || ROLE_ROUTES[user.role] || "/team-dashboard";
+      return <Navigate to={ownRoute} replace />;
     }
   }
 

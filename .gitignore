@@ -12,5 +12,6 @@ backend/.env
 seed_error.log
 hs_err_pid*.log
 frontend/node_modules/
+frontend/.env.production
 frontend/node_modules/
 frontend/dist/

@@ -7,16 +7,15 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// Pages
-import Home              from "./pages/Home";
-import Login             from "./pages/Login";
-import InvestorDashboard from "./pages/InvestorDashboard";
-import FounderDashboard  from "./pages/FounderDashboard";
-import TeamDashboard     from "./pages/TeamDashboard";
+import Home                  from "./pages/Home";
+import Login                 from "./pages/Login";
+import InvestorDashboard     from "./pages/InvestorDashboard";
+import FounderDashboard      from "./pages/FounderDashboard";
+import TeamDashboard         from "./pages/TeamDashboard";
 import CollaboratorDashboard from "./pages/CollaboratorDashboard";
-import Startups          from "./pages/Startups";
-import Profile           from "./pages/Profile";
-import Admin             from "./pages/Admin";
+import Startups              from "./pages/Startups";
+import Profile               from "./pages/Profile";
+import Admin                 from "./pages/Admin";
 
 function Fade({ children }) {
   return (
@@ -24,7 +23,7 @@ function Fade({ children }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.22 }}
+      transition={{ duration: 0.2 }}
     >
       {children}
     </motion.div>
@@ -43,8 +42,10 @@ export default function App() {
         <main className="flex-1">
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
-              {/* Public */}
+
+              {/* ── Public ─────────────────────────────────────────────── */}
               <Route path="/" element={<Fade><Home /></Fade>} />
+
               <Route
                 path="/login"
                 element={
@@ -54,7 +55,7 @@ export default function App() {
                 }
               />
 
-              {/* Role-protected dashboards */}
+              {/* ── Role dashboards ─────────────────────────────────────── */}
               <Route
                 path="/investor-dashboard"
                 element={
@@ -88,7 +89,7 @@ export default function App() {
                 }
               />
 
-              {/* Auth-required but any role */}
+              {/* ── Auth-required, any role ─────────────────────────────── */}
               <Route
                 path="/startups"
                 element={
@@ -106,7 +107,7 @@ export default function App() {
                 }
               />
 
-              {/* Admin — backend also enforces is_admin */}
+              {/* ── Admin ───────────────────────────────────────────────── */}
               <Route
                 path="/admin"
                 element={
@@ -116,8 +117,9 @@ export default function App() {
                 }
               />
 
-              {/* Catch-all */}
+              {/* ── Catch-all ───────────────────────────────────────────── */}
               <Route path="*" element={<Navigate to="/" replace />} />
+
             </Routes>
           </AnimatePresence>
         </main>
@@ -126,4 +128,3 @@ export default function App() {
     </div>
   );
 }
-
