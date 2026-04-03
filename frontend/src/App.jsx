@@ -1,6 +1,7 @@
 import { Route, Routes, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "./context/AuthContext";
+import { roleToRoute } from "./utils/session";
 import SpaceBackground from "./components/SpaceBackground";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -126,13 +127,3 @@ export default function App() {
   );
 }
 
-function roleToRoute(role) {
-  const map = {
-    investor:     "/investor-dashboard",
-    founder:      "/founder-dashboard",
-    seeker:       "/team-dashboard",
-    member:       "/team-dashboard",
-    collaborator: "/collaborator-dashboard",
-  };
-  return map[(role || "").toLowerCase()] || "/team-dashboard";
-}
